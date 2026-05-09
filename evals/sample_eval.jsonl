@@ -1,0 +1,4 @@
+{"question": "What is the SLA for items with a copyright similarity score above 0.85?", "contexts": ["When a piece of submitted content is flagged with a copyright similarity score above 0.85, it must be escalated to a human reviewer within 24 hours."], "ground_truth": "Escalated to a human reviewer within 24 hours."}
+{"question": "What confidence level allows automated decisions without human review?", "contexts": ["Automated moderation decisions require a model confidence of at least 0.90 to be acted on without human review."], "ground_truth": "0.90 or higher."}
+{"question": "How long are moderation audit records retained?", "contexts": ["These records are retained for 18 months."], "ground_truth": "18 months."}
+{"question": "What happens if an asset hits the registered trademarks database?", "contexts": ["A positive hit on the trademarks database is an automatic Reject."], "ground_truth": "Automatic reject."}
