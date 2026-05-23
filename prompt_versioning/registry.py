@@ -64,14 +64,18 @@ def register(name: str, file: str, author: str) -> PromptVersion:
     return pv
 
 
-def load(name: str, version: int | None = None) -> str:
+def resolve(name: str, version: int | None = None) -> dict:
+    """Return the registry entry for `name` at the given (or latest) version."""
     entries = [e for e in _load() if e["name"] == name]
     if not entries:
         raise KeyError(f"No prompt registered with name '{name}'")
     if version is None:
-        entry = max(entries, key=lambda e: e["version"])
-    else:
-        entry = next(e for e in entries if e["version"] == version)
+        return max(entries, key=lambda e: e["version"])
+    return next(e for e in entries if e["version"] == version)
+
+
+def load(name: str, version: int | None = None) -> str:
+    entry = resolve(name, version)
     return Path(entry["body_path"]).read_text(encoding="utf-8")
 
 

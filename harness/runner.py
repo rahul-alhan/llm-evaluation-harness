@@ -10,7 +10,7 @@ from langchain_openai import ChatOpenAI
 from evaluators.gates import evaluate_gates
 from evaluators.hallucination import hallucination_rate
 from evaluators.ragas_eval import run_ragas
-from prompt_versioning.registry import load as load_prompt
+from prompt_versioning.registry import load as load_prompt, resolve as resolve_prompt
 
 
 def _llm():
@@ -31,7 +31,10 @@ def _generate(prompt_template: str, item: dict) -> str:
 
 
 def run(prompt_name: str, eval_path: str, out_path: str, version: int | None = None) -> dict:
-    prompt = load_prompt(prompt_name, version)
+    entry = resolve_prompt(prompt_name, version)
+    resolved_version = entry["version"]
+    prompt_hash = entry["hash"]
+    prompt = load_prompt(prompt_name, resolved_version)
     items = _read_jsonl(eval_path)
 
     enriched = []
@@ -58,7 +61,9 @@ def run(prompt_name: str, eval_path: str, out_path: str, version: int | None = N
 
     result = {
         "prompt": prompt_name,
-        "version": version,
+        "version": resolved_version,
+        "version_requested": version,
+        "prompt_hash": prompt_hash,
         "n_items": len(items),
         "metrics": metrics,
         "gates_passed": passed,
