@@ -1,3 +1,8 @@
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+# Keep pytest's tmp + cache inside the repo so default `pytest` works on
+# systems where the OS temp dir is locked down (e.g. some Windows boxes,
+# CI runners with no /tmp write perms).
+addopts = "--basetemp=.pytest_tmp"
+cache_dir = ".pytest_cache"

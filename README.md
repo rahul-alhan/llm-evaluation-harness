@@ -22,7 +22,12 @@ Most teams ship LLM features without automated eval — every prompt change is a
 ## Quickstart
 
 ```bash
+# Production install:
 pip install -r requirements.txt
+
+# Development install (adds pytest):
+pip install -r requirements-dev.txt
+
 export OPENAI_API_KEY=sk-...
 
 # 1. Register a prompt
@@ -40,6 +45,18 @@ python -m harness.cli evaluate \
 # 3. Launch the dashboard
 streamlit run dashboards/streamlit_app.py
 ```
+
+---
+
+## Running Tests
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest -q
+```
+
+Tests cover the prompt registry contract, gate logic, and a mocked runner
+flow — no OpenAI API key or network calls required.
 
 ---
 

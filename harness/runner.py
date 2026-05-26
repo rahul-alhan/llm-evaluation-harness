@@ -1,36 +1,67 @@
-"""Run a registered prompt against an eval set and emit a result file."""
+"""Run a registered prompt against an eval set and emit a result file.
+
+`run()` takes optional dependency-injection seams for the LLM call, the
+hallucination check, and the RAGAS aggregator. This lets tests exercise
+the full output contract — provenance fields, samples shape, gate result —
+without network calls. The defaults wire the real production impls.
+"""
 from __future__ import annotations
 
 import json
 from pathlib import Path
-
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
+from typing import Callable
 
 from evaluators.gates import evaluate_gates
-from evaluators.hallucination import hallucination_rate
-from evaluators.ragas_eval import run_ragas
 from prompt_versioning.registry import load as load_prompt, resolve as resolve_prompt
 
 
-def _llm():
-    return ChatOpenAI(model="gpt-4o-mini", temperature=0)
+GenerateFn = Callable[[str, dict], str]
+HallucinateFn = Callable[[str, list[str]], dict]
+RagasFn = Callable[[list[dict]], dict]
+
+
+def _default_generate(prompt_template: str, item: dict) -> str:
+    # Imports deferred so the module can be imported (and tested with mocks)
+    # without langchain / openai installed.
+    from langchain_core.prompts import ChatPromptTemplate
+    from langchain_openai import ChatOpenAI
+
+    tpl = ChatPromptTemplate.from_messages(
+        [("system", prompt_template), ("user", "Question: {question}\n\nContext:\n{context}")]
+    )
+    chain = tpl | ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    ctx = "\n\n".join(item.get("contexts", []))
+    return chain.invoke({"question": item["question"], "context": ctx}).content
+
+
+def _default_hallucinate(answer: str, contexts: list[str]) -> dict:
+    from evaluators.hallucination import hallucination_rate
+    return hallucination_rate(answer, contexts)
+
+
+def _default_ragas(records: list[dict]) -> dict:
+    from evaluators.ragas_eval import run_ragas
+    return run_ragas(records)
 
 
 def _read_jsonl(path: str) -> list[dict]:
     return [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
 
 
-def _generate(prompt_template: str, item: dict) -> str:
-    tpl = ChatPromptTemplate.from_messages(
-        [("system", prompt_template), ("user", "Question: {question}\n\nContext:\n{context}")]
-    )
-    chain = tpl | _llm()
-    ctx = "\n\n".join(item.get("contexts", []))
-    return chain.invoke({"question": item["question"], "context": ctx}).content
+def run(
+    prompt_name: str,
+    eval_path: str,
+    out_path: str,
+    version: int | None = None,
+    *,
+    generate_fn: GenerateFn | None = None,
+    hallucinate_fn: HallucinateFn | None = None,
+    ragas_fn: RagasFn | None = None,
+) -> dict:
+    generate = generate_fn or _default_generate
+    hallucinate = hallucinate_fn or _default_hallucinate
+    aggregate = ragas_fn or _default_ragas
 
-
-def run(prompt_name: str, eval_path: str, out_path: str, version: int | None = None) -> dict:
     entry = resolve_prompt(prompt_name, version)
     resolved_version = entry["version"]
     prompt_hash = entry["hash"]
@@ -40,7 +71,7 @@ def run(prompt_name: str, eval_path: str, out_path: str, version: int | None = N
     enriched = []
     halluc_rates = []
     for item in items:
-        ans = _generate(prompt, item)
+        ans = generate(prompt, item)
         enriched.append(
             {
                 "question": item["question"],
@@ -49,10 +80,9 @@ def run(prompt_name: str, eval_path: str, out_path: str, version: int | None = N
                 "ground_truth": item.get("ground_truth", ""),
             }
         )
-        h = hallucination_rate(ans, item.get("contexts", []))
-        halluc_rates.append(h["hallucination_rate"])
+        halluc_rates.append(hallucinate(ans, item.get("contexts", []))["hallucination_rate"])
 
-    ragas_scores = run_ragas(enriched)
+    ragas_scores = aggregate(enriched)
     metrics = {
         **ragas_scores,
         "hallucination_rate": sum(halluc_rates) / len(halluc_rates) if halluc_rates else 0.0,
